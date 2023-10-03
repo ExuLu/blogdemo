@@ -4,21 +4,35 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const ejs = require('ejs');
 const _ = require('lodash');
+const mongoose = require('mongoose');
 
 const homeStartingContent = `I made this blog (realy, part of it backend) for educational purpose. You can also add somthing here :)`;
 const aboutContent = `I'm Alena and I'm student web developer. But also, I'm musician, traveller and potato lover (that's becasuse I'm belarusian, obviously)`;
 const contactContent = `You can contact with me via email exultantislupus@gmail.com or Telegram @exultantislupus`;
 
 const app = express();
+const uri = process.env.MONGODB_SECRET_URI;
 
 app.set('view engine', 'ejs');
 
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static('public'));
 
-let posts = [];
+main().catch((err) => console.log(err));
 
-app.get('/', function (req, res) {
+async function main() {
+  await mongoose.connect(`${uri}/blogDB`, { serverSelectionTimeoutMS: 5000 });
+}
+
+const postSchema = new mongoose.Schema({
+  title: String,
+  content: String,
+});
+
+const Post = new mongoose.model('Post', postSchema);
+
+app.get('/', async function (req, res) {
+  const posts = await Post.find({});
   res.render('home', {
     startingContent: homeStartingContent,
     posts: posts,
@@ -37,30 +51,30 @@ app.get('/compose', function (req, res) {
   res.render('compose');
 });
 
-app.post('/compose', function (req, res) {
-  const post = {
-    title: req.body.postTitle,
-    content: req.body.postBody,
-  };
+app.post('/compose', async function (req, res) {
+  const postTitle = req.body.postTitle;
+  const postContent = req.body.postContent;
 
-  posts.push(post);
-
+  if (postTitle && postContent) {
+    const post = new Post({
+      title: postTitle,
+      content: postContent,
+    });
+    await post.save();
+  }
   res.redirect('/');
 });
 
-app.get('/posts/:postName', function (req, res) {
-  const requestedTitle = _.lowerCase(req.params.postName);
+app.get('/posts/:postID', async function (req, res) {
+  const requestedID = req.params.postID;
+  const foundPost = await Post.findOne({ _id: requestedID });
 
-  posts.forEach(function (post) {
-    const storedTitle = _.lowerCase(post.title);
-
-    if (storedTitle === requestedTitle) {
-      res.render('post', {
-        title: post.title,
-        content: post.content,
-      });
-    }
-  });
+  if (foundPost) {
+    res.render('post', {
+      title: foundPost.title,
+      content: foundPost.content,
+    });
+  }
 });
 
 app.listen(3000, function () {
